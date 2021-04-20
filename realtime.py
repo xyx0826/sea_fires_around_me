@@ -17,6 +17,9 @@ REALTIME_ENDPOINT = "http://www2.seattle.gov/fire/" \
 
 
 class IncidentColumn(Enum):
+    """
+    Incident columns.
+    """
     INVALID = 0
     DATETIME = 1
     ID = 2
@@ -27,6 +30,9 @@ class IncidentColumn(Enum):
 
 
 class IncidentRow:
+    """
+    Represents a row of incident.
+    """
     def __init__(self,
                  dt: str, id: str, lvl: str,
                  units: str, loc: str, typ: str) -> None:
@@ -37,28 +43,42 @@ class IncidentRow:
         self.loc = loc
         self.typ = typ
 
-    def __eq__(self, o: object) -> bool:
-        if isinstance(o, IncidentRow):
-            return self.id == o.id
-        elif isinstance(o, Incident):
-            return self.id == o.get_id()
-        return False
-
 
 class RealTimeParser(HTMLParser):
+    """
+    A parser for the Real-Time 911 dispatch page.
+    """
     def __init__(self) -> None:
+        """
+        Creates a new parser.
+        """
         self._next_td = IncidentColumn.INVALID
         self._rows = []
         self._cache = []
         super().__init__()
 
     def _handle_row(self, attrs: "List[Tuple[str, Optional[str]]]") -> None:
+        """
+        Handles a new table row.
+        If valid, signals the parser to start reading columns.
+
+        Args:
+            attrs (List[Tuple[str, Optional[str]]]): Row element attributes.
+        """
         for attr in attrs:
             if attr[0] == "id" and attr[1].startswith("row_"):
                 # Valid column header
                 self._next_td = IncidentColumn.DATETIME
 
     def _handle_cell(self, attrs: "List[Tuple[str, Optional[str]]]") -> None:
+        """
+        Handles a new table cell.
+        If the incident is inactive, signals the parser to
+        skip over remaining columns.
+
+        Args:
+            attrs (List[Tuple[str, Optional[str]]]): Cell element attributes.
+        """
         for attr in attrs:
             if attr[0] == "class" and attr[1] != "active":
                 # Closed incident, ignore
@@ -67,6 +87,14 @@ class RealTimeParser(HTMLParser):
     def handle_starttag(self,
                         tag: str,
                         attrs: "List[Tuple[str, Optional[str]]]") -> None:
+        """
+        Handles an opening tag.
+        Dispatches new table rows and cells to handlers.
+
+        Args:
+            tag (str): The opening tag.
+            attrs (List[Tuple[str, Optional[str]]]): Attributes for the tag.
+        """
         if tag == "tr":
             # Might be a new row
             self._handle_row(attrs)
@@ -75,6 +103,13 @@ class RealTimeParser(HTMLParser):
             self._handle_cell(attrs)
 
     def handle_endtag(self, tag: str) -> None:
+        """
+        Handles a closing tag.
+        Pushes saved columns onto the row list as a new incident row.
+
+        Args:
+            tag (str): The closing tag.
+        """
         if tag == "tr" and self._next_td != IncidentColumn.INVALID:
             # End of row
             if len(self._cache) < 6:
@@ -88,6 +123,13 @@ class RealTimeParser(HTMLParser):
             self._cache.clear()
 
     def handle_data(self, data: str) -> None:
+        """
+        Handles data in tags.
+        Pushes valid column texts onto the cache.
+
+        Args:
+            data (str): Data.
+        """
         if self._next_td == IncidentColumn.INVALID:
             return
 
@@ -100,15 +142,41 @@ class RealTimeParser(HTMLParser):
             self._next_td = IncidentColumn(self._next_td.value + 1)
 
     def feed(self, feed: str) -> None:
+        """
+        Feeds a new HTML page to the parser.
+        Clears previously read rows.
+
+        Args:
+            feed (str): A new HTML page.
+        """
         self._rows.clear()
         super().feed(feed)
 
     def get_rows(self) -> "List[IncidentRow]":
+        """
+        Gets all read rows.
+
+        Returns:
+            List[IncidentRow]: A list of all read rows.
+        """
         return self._rows.copy()
 
 
 class RealTime:
-    def __init__(self, origin_lat, origin_lon, mapquest_api_key) -> None:
+    """
+    A real-time 911 dispatch monitor.
+    """
+    def __init__(self,
+                 origin_lat: float, origin_lon: float,
+                 mapquest_api_key: str) -> None:
+        """
+        Creates a new monitor.
+
+        Args:
+            origin_lat (float): The origin latitude.
+            origin_lon (float): The origin longitude.
+            mapquest_api_key (str): The MapQuest API key for geocoding.
+        """
         self._ses = requests.Session()
         self._parser = RealTimeParser()
         self._coder = Geocoder(mapquest_api_key)
@@ -121,6 +189,13 @@ class RealTime:
         })
 
     def _get_two_day_rows(self) -> "List[IncidentRow]":
+        """
+        Gets all incident rows from today and yesterday
+        to deal with midnight jumps.
+
+        Returns:
+            List[IncidentRow]: A list of all active incident rows.
+        """
         r = self._ses.get(REALTIME_ENDPOINT, params={
             "action": "Today"
         })
@@ -138,6 +213,12 @@ class RealTime:
         return rows
 
     def _add_incident(self, row: IncidentRow) -> None:
+        """
+        Adds a new incident and prints a message.
+
+        Args:
+            row (IncidentRow): The new incident.
+        """
         latlon = self._coder.geocode(row.loc)
         inc = Incident(row.id, row.datetime, row.loc, latlon, row.typ)
         dist = inc.get_dist_to(self._origin)
@@ -147,12 +228,24 @@ class RealTime:
         self._incidents[row.id] = inc
 
     def _update_incident(self, row: IncidentRow) -> None:
+        """
+        Updates an open incident.
+
+        Args:
+            row (IncidentRow): The incident to update.
+        """
         inc = self._incidents[row.id]
         for unit in row.units.split(" "):
             inc.add_unit(unit)
         inc.update_type(row.typ)
 
     def _remove_incident(self, inc_id: str) -> None:
+        """
+        Removes a resolved incident and prints a message.
+
+        Args:
+            inc_id (str): The ID of the resolved incident.
+        """
         inc = self._incidents[inc_id]
         addr = inc.get_addr()
         mins = inc.get_time_since().total_seconds() / 60
@@ -160,6 +253,9 @@ class RealTime:
         del self._incidents[inc_id]
 
     def update(self) -> None:
+        """
+        Checks if there are incidents to update.
+        """
         rows = self._get_two_day_rows()
 
         # Add new rows
