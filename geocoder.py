@@ -4,17 +4,37 @@ from typing import Tuple
 
 import requests
 
-# Suffix for Seattle addresses
+# MapQuest geocoding API
 API_ENDPOINT = "https://www.mapquestapi.com/geocoding/v1/address"
+
+# Suffix for Seattle addresses
 ADDRESS_SUFFIX = ", Seattle, WA"
 
 
 class Geocoder:
+    """
+    A MapQuest geocoder that converts addresses to coordinates.
+    """
     def __init__(self, key: str) -> None:
+        """
+        Creates a new geocoder.
+
+        Args:
+            key (str): MapQuest API key.
+        """
         self._key = key
         self._ses = requests.Session()
 
     def _make_url_params(self, addr: str) -> dict:
+        """
+        Creates a URL parameter dictionary for MapQuest API.
+
+        Args:
+            addr (str): The address to geocode.
+
+        Returns:
+            dict: URL parameters for the endpoint.
+        """
         return {
             "key": self._key,
             "location": addr,
@@ -22,6 +42,15 @@ class Geocoder:
         }
 
     def _send_request(self, query: dict) -> dict:
+        """
+        Sends a request with specified parameters to MapQuest.
+
+        Args:
+            query (dict): URL query parameters.
+
+        Returns:
+            dict: The JSON response, or None if there is an error.
+        """
         r = self._ses.get(API_ENDPOINT, params=query)
         if r.status_code != 200:
             print("Mapquest request error: " + r.text)
@@ -29,6 +58,15 @@ class Geocoder:
         return r.json()
 
     def geocode(self, addr: str) -> Tuple[float, float]:
+        """
+        Geocodes the specified Seattle address to coordinates.
+
+        Args:
+            addr (str): The address to geocode.
+
+        Returns:
+            Tuple[float, float]: (lat, lon), or (0, 0) if results are invalid.
+        """
         addr = addr.replace("/", "&") + ADDRESS_SUFFIX
         query = self._make_url_params(addr)
         resp = self._send_request(query)
