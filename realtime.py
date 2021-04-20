@@ -116,7 +116,8 @@ class RealTime:
         self._incidents = {}  # type: Dict[str, Incident]
 
         self._ses.headers.update({
-            "User-Agent": "SFD Feed Watcher (https://github.com/xyx0826)"
+            "User-Agent": "SFD Feed Watcher "
+            "(https://github.com/xyx0826/sea_fires_around_me)"
         })
 
     def _get_two_day_rows(self) -> "List[IncidentRow]":
