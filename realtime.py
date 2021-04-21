@@ -209,7 +209,7 @@ class RealTime:
         self._parser.feed(r.text)
         yesterday_rows = self._parser.get_rows()
         if len(yesterday_rows) > 0:
-            rows.append(yesterday_rows)
+            rows += yesterday_rows
         return rows
 
     def _add_incident(self, row: IncidentRow) -> None:
